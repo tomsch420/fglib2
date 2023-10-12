@@ -1,0 +1,5 @@
+sphinx<7.0.0
+sphinx-autoapi
+sphinxcontrib-bibtex
+nbsphinx
+sphinx-rtd-theme
