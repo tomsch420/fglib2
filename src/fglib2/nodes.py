@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import List
+from typing import List, Optional
 
 from .distributions import Multinomial
 from .variables import Symbolic
@@ -66,20 +66,20 @@ class FactorNode(Node):
 
 
 class Edge:
-    """
-    Edge in a factor graph.
+
+    """Edge.
+
+    Base class for all edges.
+    Each edge class contains a message attribute,
+    which stores the corresponding message in forward and backward direction.
+
     """
 
-    _message: np.ndarray
-
-    def __init__(self, source: Node, target: Node):
+    def __init__(self, source, target, message_to_target: Optional[Multinomial] = None,
+                 message_to_source: Optional[Multinomial] = None):
+        """Create an edge."""
         self.source = source
         self.target = target
 
-    @property
-    def message(self):
-        return self._message
-
-    @message.setter
-    def message(self, message):
-        self._message = message
+        self.message_to_target = message_to_target
+        self.message_to_source = message_to_source
