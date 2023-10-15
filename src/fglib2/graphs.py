@@ -70,7 +70,7 @@ class FactorGraph(nx.Graph):
         for (u, v) in backward_path:  # Edge direction: u -> v
             incoming_messages = [self[w][v]['edge'].message_to_source for w in self.neighbors(v) if w != u]
             msg = u.sum_product(incoming_messages)
-            self[u][v]['edge'].message_to_source(u, v, msg)
+            self[u][v]['edge'].message_to_source = msg
 
     def max_product(self):
         """

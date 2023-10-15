@@ -35,7 +35,8 @@ class VariableNode(Node):
         message = self.unity()
 
         for msg in messages:
-            message *= msg
+            if msg is not None:
+                message *= msg
 
         return message
 
@@ -56,11 +57,13 @@ class FactorNode(Node):
 
         # Product over incoming messages
         for msg in messages:
-            message *= msg
+            if msg is not None:
+                message *= msg
 
         # Integration/Summation over incoming variables
         for msg in messages:
-            message = message.marginalize(msg.variables, normalize=False)
+            if msg is not None:
+                message = message.marginal(msg.variables, normalize=False)
 
         return message
 
