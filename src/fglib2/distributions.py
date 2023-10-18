@@ -13,7 +13,7 @@ class Multinomial:
 
     def __init__(self, variables: Iterable[Symbolic], probabilities: Optional[np.ndarray] = None,
                  normalize: bool = True):
-        self.variables = list(variables)
+        self.variables = list(sorted(variables))
 
         shape = tuple(len(variable.domain) for variable in self.variables)
 
@@ -35,7 +35,11 @@ class Multinomial:
 
         :return: The marginal distribution over variables.
         """
-        axis = tuple(self.variables.index(variable) for variable in set(self.variables) - set(variables))
+
+        # calculate which variables to marginalize over
+        axis = tuple(self.variables.index(variable) for variable in self.variables if variable not in variables)
+        print("OWN", self.variables, "REQUIRED", variables)
+        print(axis)
 
         probabilities = np.sum(self.probabilities, axis=axis)
 
@@ -102,9 +106,31 @@ class Multinomial:
         :return: The sum of the two distributions.
 
         """
-        result = self.merge(other)
-        result.probabilities = self.probabilities * other.probabilities
-        return result
+
+        if set(other.variables) == set(self.variables):
+            return Multinomial(self.variables, self.probabilities * other.probabilities)
+
+        if len(self.variables) < len(other.variables):
+            return other * self
+
+        assert set(other.variables).issubset(set(self.variables))
+
+        assert len(other.variables) == 1
+
+        dimension = self.variables.index(other.variables[0])
+
+        if dimension == 0:
+            probabilities = self.probabilities * other.probabilities.reshape(-1, 1)
+        elif dimension == 1:
+            probabilities = self.probabilities * other.probabilities
+
+        else:
+            raise NotImplementedError("Dont care")
+
+        return Multinomial(self.variables, probabilities)
+        # result = self.merge(other)
+        # result.probabilities = self.probabilities * other.probabilities
+        # return result
 
     def __eq__(self, other: 'Multinomial') -> bool:
         """Compare self with other and return the boolean result.
@@ -116,3 +142,15 @@ class Multinomial:
         return (self.variables == other.variables and
                 self.probabilities.shape == other.probabilities.shape and
                 np.all(self.probabilities == other.probabilities))
+
+    def __str__(self):
+        return f"P{self.variables}: \n" + str(self.probabilities)
+
+    def likelihood(self, event: List[int]) -> float:
+        """
+        Calculate the likelihood of an event.
+        The event is a list of values for the variables in the same order
+        :param event:
+        :return: P(event)
+        """
+        return float(self.probabilities[tuple(event)])
