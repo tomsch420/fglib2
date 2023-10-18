@@ -117,15 +117,11 @@ class Multinomial:
 
         assert len(other.variables) == 1
 
+        # Multiply the probabilities along the dimension of the other variable
         dimension = self.variables.index(other.variables[0])
-
-        if dimension == 0:
-            probabilities = self.probabilities * other.probabilities.reshape(-1, 1)
-        elif dimension == 1:
-            probabilities = self.probabilities * other.probabilities
-
-        else:
-            raise NotImplementedError("Dont care")
+        shape = [1, ] * len(self.variables)
+        shape[dimension] = -1
+        probabilities = self.probabilities * other.probabilities.reshape(shape)
 
         return Multinomial(self.variables, probabilities)
         # result = self.merge(other)

@@ -125,21 +125,19 @@ class FglibCompareTestCase(unittest.TestCase):
 
         fc_own = FactorNode([self.x2, self.x4], Multinomial([self.x2, self.x4], np.array(dist_fc)))
 
-        self.graph = ForneyFactorGraph() * fa_own * fb_own # * fc_own
+        self.graph = ForneyFactorGraph() * fa_own * fb_own * fc_own
 
         # Add nodes to factor graph
         self.fglib_graph.set_nodes([self.fglib_x1, self.fglib_x2, self.fglib_x3, self.fglib_x4])
-        # self.fglib_graph.set_nodes([fa, fb, fc])
-        self.fglib_graph.set_nodes([self.fglib_x1, self.fglib_x2, self.fglib_x3])
-        self.fglib_graph.set_nodes([fa, fb])
+        self.fglib_graph.set_nodes([fa, fb, fc])
 
         # Add edges to factor graph
         self.fglib_graph.set_edge(self.fglib_x1, fa)
         self.fglib_graph.set_edge(fa, self.fglib_x2)
         self.fglib_graph.set_edge(self.fglib_x2, fb)
         self.fglib_graph.set_edge(fb, self.fglib_x3)
-        # self.fglib_graph.set_edge(self.fglib_x2, fc)
-        # self.fglib_graph.set_edge(fc, self.fglib_x4)
+        self.fglib_graph.set_edge(self.fglib_x2, fc)
+        self.fglib_graph.set_edge(fc, self.fglib_x4)
 
     def test_likelihood(self):
         world = [0, 0, 0, 0]
@@ -152,7 +150,6 @@ class FglibCompareTestCase(unittest.TestCase):
     def test_brute_force(self):
         worlds = list(itertools.product(*[variable.domain for variable in self.graph.variables]))
         worlds = np.array(worlds)
-        print(worlds.shape)
         potentials = np.ones(len(worlds))
 
         for idx, world in enumerate(worlds):
@@ -168,48 +165,23 @@ class FglibCompareTestCase(unittest.TestCase):
 
     def test_retardation(self):
         x1_to_fa = self.graph.node_of(self.x1).unity()
-        print(x1_to_fa)
+        # print(x1_to_fa)
         fa = self.graph.factor_of([self.x1, self.x2])
         fa_to_x2 = (fa.distribution * x1_to_fa).marginal([self.x2])
         x2_to_fb = fa_to_x2
 
         fb = self.graph.factor_of([self.x2, self.x3])
-        fb_to_x3 = (x2_to_fb* fb.distribution).marginal([self.x3])
-        print(fb_to_x3)
+        fb_to_x3 = (x2_to_fb * fb.distribution).marginal([self.x3])
+        # print(fb_to_x3)
 
     def test_spa_x1(self):
         nx.draw(self.graph, with_labels=True)
         # plt.show()
         fglib.inference.sum_product(self.fglib_graph, query_node=self.fglib_x1)
-
         # Test belief of variable node x1
         fglib_belief = self.fglib_x1.belief(normalize=True)
-
         self.graph.sum_product()
-
-        print([self.graph.edges[e[0], e[1]]["edge"] for e in self.graph.edges])
         belief = self.graph.belief(self.x1)
-        #import fglib.rv
-        def getval(message):
-            a = []
-            for i,row in enumerate(message):
-                if row[0]:
-                    print(f"R{i} C0 dim ", *row[0].dim)
-                if row[1]:
-                    print(f"R{i} C1 dim ", *row[1].dim)
-                a.append(str(row[0]) + ", " + str(row[1]))
-            return "[" + "\n".join(a) + "]"
-
-        fglib_edges = [getval(self.fglib_graph.edges[e[0], e[1]]["object"].message) for e in self.fglib_graph.edges]
-
-
-        own_edges = [self.graph.edges[e[0], e[1]]["edge"] for e in self.graph.edges]
-        print("-" * 80)
-        print(*fglib_edges, sep="\n============================\n")
-        print("-" * 80)
-        print(own_edges)
-        print("-" * 80)
-        print(belief.probabilities, fglib_belief.pmf)
         self.assertTrue(np.allclose(belief.probabilities, fglib_belief.pmf))
 
     def test_spa_x2(self):
@@ -218,7 +190,6 @@ class FglibCompareTestCase(unittest.TestCase):
         fglib_belief = self.fglib_x2.belief(normalize=True)
         self.graph.sum_product()
         belief = self.graph.belief(self.x2)
-        print(belief.probabilities, fglib_belief.pmf)
         self.assertTrue(np.allclose(belief.probabilities, fglib_belief.pmf))
 
     def test_spa_x3(self):
@@ -227,8 +198,7 @@ class FglibCompareTestCase(unittest.TestCase):
         fglib_belief = self.fglib_x3.belief(normalize=True)
         self.graph.sum_product()
         belief = self.graph.belief(self.x3)
-
-        print(belief.probabilities, fglib_belief.pmf)
+        self.assertTrue(np.allclose(belief.probabilities, fglib_belief.pmf))
 
     def test_spa_x4(self):
         fglib.inference.sum_product(self.fglib_graph, query_node=self.fglib_x4)
@@ -236,8 +206,7 @@ class FglibCompareTestCase(unittest.TestCase):
         fglib_belief = self.fglib_x4.belief(normalize=True)
         self.graph.sum_product()
         belief = self.graph.belief(self.x4)
-
-        print(belief.probabilities, fglib_belief.pmf)
+        self.assertTrue(np.allclose(belief.probabilities, fglib_belief.pmf))
 
     def test_spa(self):
         fglib.inference.sum_product(self.fglib_graph, query_node=self.fglib_x1)

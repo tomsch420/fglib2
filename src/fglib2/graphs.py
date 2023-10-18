@@ -67,36 +67,22 @@ class FactorGraph(nx.Graph):
         forward_path = list(reversed(backward_path))
 
         # Messages in forward phase
-        for (target, source) in forward_path:  # Edge direction: u -> v
-            print(source, target)
-            if isinstance(source, VariableNode):
-                incoming_messages = [self.edges[neighbour, source]['edge'].factor_to_variable for neighbour in
-                                     self.neighbors(source) if neighbour != target]
-                msg = source.sum_product(incoming_messages)
+        for i, path in enumerate([forward_path, backward_path]):  # Edge direction: u -> v
+            for (target, source) in path:
+                if i == 1:
+                    # Reverse the direction of the edges in the backward path
+                    target, source = source, target
+                if isinstance(source, VariableNode):
+                    incoming_messages = [self.edges[neighbour, source]['edge'].factor_to_variable for neighbour in
+                                         self.neighbors(source) if neighbour != target]
+                    msg = source.sum_product(incoming_messages)
+                    self.edges[source, target]['edge'].variable_to_factor = msg
 
-                self.edges[source, target]['edge'].variable_to_factor = msg
-                print(self.edges[source, target]['edge'])
-
-            elif isinstance(source, FactorNode):
-                incoming_messages = [self.edges[neighbour, source]['edge'].variable_to_factor for neighbour in
-                                     self.neighbors(source) if neighbour != target]
-                msg = source.sum_product(incoming_messages)
-                self.edges[source, target]['edge'].factor_to_variable = msg.marginal([target.variable], normalize=False)
-
-        # Messages in backward phase
-        for (source, target) in backward_path:  # Edge direction: u -> v
-
-            if isinstance(source, VariableNode):
-                incoming_messages = [self.edges[neighbour, source]['edge'].factor_to_variable for neighbour in
-                                     self.neighbors(source) if neighbour != target]
-                msg = source.sum_product(incoming_messages)
-                self.edges[source, target]['edge'].variable_to_factor = msg
-
-            elif isinstance(source, FactorNode):
-                incoming_messages = [self.edges[neighbour, source]['edge'].variable_to_factor for neighbour in
-                                     self.neighbors(source) if neighbour != target]
-                msg = source.sum_product(incoming_messages)
-                self.edges[source, target]['edge'].factor_to_variable = msg.marginal([target.variable], normalize=False)
+                elif isinstance(source, FactorNode):
+                    incoming_messages = [self.edges[neighbour, source]['edge'].variable_to_factor for neighbour in
+                                         self.neighbors(source) if neighbour != target]
+                    msg = source.sum_product(incoming_messages)
+                    self.edges[source, target]['edge'].factor_to_variable = msg.marginal([target.variable], normalize=False)
 
     def node_of(self, variable: Variable) -> VariableNode:
         """
