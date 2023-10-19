@@ -46,7 +46,7 @@ class Symbolic(Variable):
 
         :return: List of indices or just the index if a single element was given.
         """
-        if not isinstance(values, (list, tuple,)):
+        if values in self.domain:
             return self.encode([values])[0]
         else:
             return [self.domain.index(value) for value in values]

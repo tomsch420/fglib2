@@ -1,15 +1,28 @@
+import itertools
 from typing import Iterable, List, Optional
 
 import numpy as np
 
 from .variables import Symbolic
 
-import copy
+import tabulate
 
 
 class Multinomial:
+    """
+    A multinomial distribution over symbolic random variables.
+    """
 
     variables = List[Symbolic]
+    """
+    The variables in the distribution.
+    """
+
+    probabilities: np.ndarray
+    """
+    The probability mass function. The dimensions correspond to the variables in the same order.
+    The first dimension indexes over the first variable and so on.
+    """
 
     def __init__(self, variables: Iterable[Symbolic], probabilities: Optional[np.ndarray] = None,
                  normalize: bool = True):
@@ -38,67 +51,16 @@ class Multinomial:
 
         # calculate which variables to marginalize over
         axis = tuple(self.variables.index(variable) for variable in self.variables if variable not in variables)
-        print("OWN", self.variables, "REQUIRED", variables)
-        print(axis)
 
         probabilities = np.sum(self.probabilities, axis=axis)
 
         return Multinomial(variables, probabilities, normalize=normalize)
 
-    def expand(self, variables: Iterable[Symbolic]) -> 'Multinomial':
-        """
-        Expand the distribution to include the given variables.
-        :param variables: The variables to include
-        :return: The expanded multinomial distribution.
-        """
-
-        # Extract missing dimensions and their cardinality
-        diff = [var for var in variables if var not in self.variables]
-        reps = [1, ] * (len(self.variables) + len(diff))
-
-        # copy probabilities
-        probabilities = self.probabilities
-
-        # Expand missing dimensions
-        for index, variable in enumerate(diff):
-            probabilities = np.expand_dims(probabilities, axis=-1)
-            reps[len(self.variables) + index] = len(variable.domain)
-
-        # Repeat missing dimensions
-        probabilities = np.tile(probabilities, reps)
-
-        # return final distribution
-        return Multinomial(self.variables + diff, probabilities, normalize=False)
-
-    def __copy__(self):
+    def __copy__(self) -> 'Multinomial':
+        """Return a shallow copy of the distribution."""
         return Multinomial(self.variables, self.probabilities)
 
-    def merge(self, other: 'Multinomial') -> 'Multinomial':
-        """
-        Merge the dimensions of two multinomial distributions.
-        :param other: The other distribution.
-        :return: A new multinomial distribution that contains variables from both distributions.
-        """
-        # Verify the dimensions of summand and summand.
-        if len(self.probabilities.shape) < len(other.probabilities.shape):
-            return self.expand(other.variables)
-        elif len(self.probabilities.shape) > len(other.probabilities.shape):
-            return other.expand(self.variables)
-        else:
-            return copy.copy(self)
-
-    def __add__(self, other: 'Multinomial') -> 'Multinomial':
-        """Add two Multinomial distributions and return the result.
-
-        :param other: The other distribution to add.
-
-        :return: The sum of the two distributions.
-        """
-        result = self.merge(other)
-        result.probabilities = self.probabilities + other.probabilities
-        return result
-
-    def __mul__(self, other):
+    def __mul__(self, other: 'Multinomial') -> 'Multinomial':
         """Multiply two Multinomial distributions and return the result.
 
         :param other: The other distribution to multiply.
@@ -107,9 +69,11 @@ class Multinomial:
 
         """
 
+        # if the distributions are over the same variables, multiply the probability element-wise
         if set(other.variables) == set(self.variables):
             return Multinomial(self.variables, self.probabilities * other.probabilities)
 
+        # if the other distribution is over more variables than this one, flip order
         if len(self.variables) < len(other.variables):
             return other * self
 
@@ -124,9 +88,6 @@ class Multinomial:
         probabilities = self.probabilities * other.probabilities.reshape(shape)
 
         return Multinomial(self.variables, probabilities)
-        # result = self.merge(other)
-        # result.probabilities = self.probabilities * other.probabilities
-        # return result
 
     def __eq__(self, other: 'Multinomial') -> bool:
         """Compare self with other and return the boolean result.
@@ -140,13 +101,43 @@ class Multinomial:
                 np.all(self.probabilities == other.probabilities))
 
     def __str__(self):
-        return f"P{self.variables}: \n" + str(self.probabilities)
+        return "P({}): \n".format(", ".join(var.name for var in self.variables)) + str(self.probabilities)
 
-    def likelihood(self, event: List[int]) -> float:
+    def to_tabulate(self) -> str:
+        """
+        :return: a pretty table of the distribution.
+        """
+        columns = [[var.name for var in self.variables] + ["P"]]
+        events: List[List] = list(list(event) for event in itertools.product(*[var.domain for var in self.variables]))
+
+        for idx, event in enumerate(events):
+            events[idx].append(self.likelihood(event))
+        table = columns + events
+
+        return tabulate.tabulate(table, headers="firstrow", tablefmt="fancy_grid")
+
+    def encode(self, event: List) -> List[int]:
+        """
+        Encode an event into a list of indices within the respective domains.
+        :param event: The event to encode as a list of elements of the respective variables domains
+        :return: The encoded event
+        """
+        return [variable.encode(value) for variable, value in zip(self.variables, event)]
+
+    def _likelihood(self, event: List[int]) -> float:
+        """
+        Calculate the likelihood of an event.
+        The event is a list of indices for the variable values in the same order
+        :param event:
+        :return: P(event)
+        """
+        return float(self.probabilities[tuple(event)])
+
+    def likelihood(self, event: List) -> float:
         """
         Calculate the likelihood of an event.
         The event is a list of values for the variables in the same order
         :param event:
         :return: P(event)
         """
-        return float(self.probabilities[tuple(event)])
+        return self._likelihood(self.encode(event))
