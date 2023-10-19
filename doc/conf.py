@@ -14,7 +14,9 @@ author = 'Tom Schierenbeck, Abdelrhman Bassiouny'
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = ['autoapi.extension',
-              'sphinx_rtd_theme',]
+              'sphinx_rtd_theme',
+              "nbsphinx",
+              "sphinx_gallery.load_style"]
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
