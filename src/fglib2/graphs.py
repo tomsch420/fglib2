@@ -1,6 +1,6 @@
 import itertools
 from abc import ABC
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from typing import Tuple, Iterable
 
 import networkx as nx
@@ -12,6 +12,7 @@ from .variables import Variable
 
 
 class Node(ABC):
+    """Abstract Class for a nodes in a factor graph."""
 
     def sum_product(self, messages: List[Multinomial]) -> Multinomial:
         """
@@ -226,7 +227,7 @@ class FactorGraph(nx.Graph):
     efficient computations, such as the computation of marginal distributions through the sum–product algorithm.
 
     .. Note::
-        Only factor trees are efficient to compute with the sum product algorithm. Other graphs rely and approximate
+        Only factor trees are efficient to compute with the sum/max product algorithm. Other graphs rely on approximate
         inference.
     """
 
@@ -307,6 +308,68 @@ class FactorGraph(nx.Graph):
                     self.edges[source, target]['edge'].factor_to_variable = msg.marginal([target.variable],
                                                                                          normalize=False)
 
+    def max_product(self) -> Dict[Symbolic, Any]:
+        """
+        Apply the max product algorithm to the factor graph.
+        The messages of the edges are set in place.
+        """
+
+        root = self.variable_nodes[0]
+
+        # Depth First Search to determine edges
+        dfs = nx.dfs_edges(self, root)
+
+        # Convert tuple to a reversed list
+        backtracking_path = list(dfs)
+        forward_path = list(reversed(backtracking_path))
+
+        for target, source in forward_path:
+            if isinstance(source, VariableNode):
+                incoming_messages = [self.edges[neighbour, source]['edge'].factor_to_variable for neighbour in
+                                     self.neighbors(source) if neighbour != target]
+                msg = source.sum_product(incoming_messages)
+                self.edges[source, target]['edge'].variable_to_factor = msg
+
+            elif isinstance(source, FactorNode):
+                incoming_messages = [self.edges[neighbour, source]['edge'].variable_to_factor for neighbour in
+                                     self.neighbors(source) if neighbour != target]
+                msg = source.sum_product(incoming_messages)
+
+                msg = msg.max_message(target.variable)
+                self.edges[source, target]['edge'].factor_to_variable = msg
+
+        for source, target in backtracking_path:
+            if isinstance(source, VariableNode):
+                incoming_messages = [self.edges[neighbour, source]['edge'].factor_to_variable for neighbour in
+                                     self.neighbors(source)]
+                # get the posterior distribution
+                msg = source.sum_product(incoming_messages)
+
+                # get the mode and likelihood
+                mode, likelihood = msg.mode()
+
+                # construct dirac message for the mode
+                probabilities = np.zeros(len(source.variable.domain))
+                for mode_ in mode:
+                    probabilities[mode_] = 1.
+                msg = Multinomial([source.variable], probabilities)
+
+                # set message
+                self.edges[source, target]['edge'].variable_to_factor = msg
+
+            elif isinstance(source, FactorNode):
+                incoming_messages = [self.edges[neighbour, source]['edge'].variable_to_factor for neighbour in
+                                     self.neighbors(source)]
+                msg = source.sum_product(incoming_messages)
+
+                msg = msg.max_message(target.variable)
+                self.edges[source, target]['edge'].factor_to_variable = msg
+
+        result = dict()
+        for variable in self.variables:
+            result[variable] = self.belief(variable).mode()[0][0]
+        return result
+
     def node_of(self, variable: Variable) -> VariableNode:
         """
         Return the variable node of a variable.
@@ -322,13 +385,6 @@ class FactorGraph(nx.Graph):
         :return: The factor node.
         """
         return [node for node in self.factor_nodes if set(node.variables) == set(variables)][0]
-
-    def max_product(self):
-        """
-        Apply the max product algorithm to the factor graph.
-        The variables and factors are modified in place.
-        """
-        raise NotImplementedError()
 
     def belief(self, variable: Symbolic) -> Multinomial:
         """
@@ -399,3 +455,11 @@ class FactorGraph(nx.Graph):
                 potentials[idx] *= factor.distribution.likelihood(world[indices])
 
         return worlds, potentials
+
+    def reset(self):
+        """
+        Clear all messages in the graph in place.
+        """
+        for edge in self.edges:
+            self.edges[edge]['edge'].variable_to_factor = None
+            self.edges[edge]['edge'].factor_to_variable = None

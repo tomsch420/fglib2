@@ -1,5 +1,5 @@
 import itertools
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 
@@ -56,6 +56,32 @@ class Multinomial:
 
         return Multinomial(variables, probabilities, normalize=normalize)
 
+    def _mode(self) -> Tuple[List, float]:
+        """
+        Calculate the most likely event.
+        :return: The mode of the distribution as index-list and its likelihood.
+        """
+
+        likelihood = np.max(self.probabilities)
+        mode = [event.tolist() for event in np.where(self.probabilities == likelihood)]
+        return mode, likelihood
+
+    def mode(self) -> Tuple[List, float]:
+        """
+        Calculate the most likely event.
+        :return: The mode of the distribution and its likelihood.
+        """
+        event, probability = self._mode()
+        return self.decode(event), probability
+
+    def decode(self, event: List[int]) -> List:
+        """
+        Decode an event from a list of indices to a list of values.
+        :param event: The event to decode as a list of indices
+        :return: The decoded event
+        """
+        return [variable.decode(value) for variable, value in zip(self.variables, event)]
+
     def __copy__(self) -> 'Multinomial':
         """Return a shallow copy of the distribution."""
         return Multinomial(self.variables, self.probabilities)
@@ -87,7 +113,7 @@ class Multinomial:
         shape[dimension] = -1
         probabilities = self.probabilities * other.probabilities.reshape(shape)
 
-        return Multinomial(self.variables, probabilities)
+        return Multinomial(self.variables, probabilities, normalize=False)
 
     def __eq__(self, other: 'Multinomial') -> bool:
         """Compare self with other and return the boolean result.
@@ -141,3 +167,16 @@ class Multinomial:
         :return: P(event)
         """
         return self._likelihood(self.encode(event))
+
+    def max_message(self, variable) -> 'Multinomial':
+        """
+        Construct a message that contains the maximum likelihood for each value of the variable.
+        :param variable: The variable to construct it over.
+        :return: A not normalized distribution over the variable with the maximum likelihood for each value.
+        """
+        if variable not in self.variables:
+            raise ValueError("The variable {} is not in the distribution."
+                             "The distributions variables are {}".format(variable, self.variables))
+        axis = tuple(index for index, var in enumerate(self.variables) if var != variable)
+        probabilities = np.max(self.probabilities, axis=axis)
+        return Multinomial([variable], probabilities, normalize=False)

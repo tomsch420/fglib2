@@ -1,6 +1,8 @@
 import dataclasses
 from typing import Tuple, Iterable, Union, List, Any
 
+import numpy as np
+
 
 @dataclasses.dataclass(unsafe_hash=True, eq=True)
 class Variable:
@@ -50,3 +52,16 @@ class Symbolic(Variable):
             return self.encode([values])[0]
         else:
             return [self.domain.index(value) for value in values]
+
+    def decode(self, values: Union[Any, Iterable]) -> Union[List, Any]:
+        """
+        Convert values from their respective indices in the domain to the values in the domain.
+
+        :param values: The values to convert.
+
+        :return: List of values or just the value if a single element was given.
+        """
+        if isinstance(values, (int, np.int_)):
+            return self.domain[values]
+        else:
+            return [self.domain[value] for value in values]

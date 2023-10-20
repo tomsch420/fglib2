@@ -1,24 +1,18 @@
-import itertools
 import unittest
 
-import networkx as nx
-from networkx.algorithms import bipartite
-import numpy as np
-import matplotlib.pyplot as plt
-import numpy.testing as npt
-
-from fglib2.variables import Symbolic
-from fglib2.graphs import FactorGraph, VariableNode, FactorNode, Edge
-from fglib2.distributions import Multinomial
-
-import fglib.nodes
 import fglib.graphs
 import fglib.inference
+import fglib.nodes
 import fglib.rv
+import networkx as nx
+import numpy as np
+
+from fglib2.distributions import Multinomial
+from fglib2.graphs import FactorGraph, VariableNode, FactorNode
+from fglib2.variables import Symbolic
 
 
 class FactorGraphTestCase(unittest.TestCase):
-
     x: Symbolic
     y: Symbolic
     z: Symbolic
@@ -30,23 +24,17 @@ class FactorGraphTestCase(unittest.TestCase):
         cls.z = Symbolic("Z", range(5))
 
     def test_creation(self):
-        fg = FactorGraph()
-        x = VariableNode(self.x)
-        y = VariableNode(self.y)
-        z = VariableNode(self.z)
-        fg.add_node(x)
-        fg.add_node(y)
-        fg.add_node(z)
-        fg.add_edge(x, y)
-        fg.add_edge(y, z)
-        fg.add_edge(z, x)
-        self.assertEqual(len(fg.nodes), 3)
-        self.assertEqual(len(fg.edges), 3)
-        self.assertEqual(fg.variable_nodes, [x, y, z])
+        fxy = FactorNode(Multinomial([self.x, self.y]))
+        fyz = FactorNode(Multinomial([self.y, self.z]))
+
+        fg = fxy * fyz
+
+        self.assertEqual(len(fg.nodes), 5)
+        self.assertEqual(len(fg.edges), 4)
+        self.assertEqual(fg.variables, [self.x, self.y, self.z])
 
 
 class InferenceTestCase(unittest.TestCase):
-
     x: Symbolic
     y: Symbolic
     z: Symbolic
@@ -70,8 +58,7 @@ class InferenceTestCase(unittest.TestCase):
         f_yz = FactorNode(Multinomial([cls.y, cls.z], np.random.rand(3, 5)))
 
         cls.factor_graph.add_nodes_from([f_x, f_xy, f_yz])
-        cls.factor_graph.add_edges_from([(x, f_x), (x, f_xy), (y, f_xy),
-                                         (y, f_yz), (z, f_yz)])
+        cls.factor_graph.add_edges_from([(x, f_x), (x, f_xy), (y, f_xy), (y, f_yz), (z, f_yz)])
 
     def test_sum_product(self):
         # plot graph
@@ -102,22 +89,17 @@ class FglibCompareTestCase(unittest.TestCase):
         self.x4 = Symbolic("x4", range(2))
 
         # Create factor nodes (with joint distributions)
-        dist_fa = [[0.3, 0.4],
-                   [0.3, 0.0]]
-        fa = fglib.nodes.FNode("fa",
-                                    fglib.rv.Discrete(dist_fa, self.fglib_x1, self.fglib_x2))
+        dist_fa = [[0.3, 0.4], [0.3, 0.0]]
+        fa = fglib.nodes.FNode("fa", fglib.rv.Discrete(dist_fa, self.fglib_x1, self.fglib_x2))
 
-        fa_own = FactorNode(Multinomial([self.x1, self.x2],
-                                                            np.array(dist_fa)))
+        fa_own = FactorNode(Multinomial([self.x1, self.x2], np.array(dist_fa)))
 
-        dist_fb = [[0.3, 0.4],
-                   [0.3, 0.0]]
+        dist_fb = [[0.3, 0.4], [0.3, 0.0]]
         fb = fglib.nodes.FNode("fb", fglib.rv.Discrete(dist_fb, self.fglib_x2, self.fglib_x3))
 
-        fb_own = FactorNode( Multinomial([self.x2, self.x3], np.array(dist_fb)))
+        fb_own = FactorNode(Multinomial([self.x2, self.x3], np.array(dist_fb)))
 
-        dist_fc = [[0.3, 0.4],
-                   [0.3, 0.0]]
+        dist_fc = [[0.3, 0.4], [0.3, 0.0]]
         fc = fglib.nodes.FNode("fc", fglib.rv.Discrete(dist_fc, self.fglib_x2, self.fglib_x4))
 
         fc_own = FactorNode(Multinomial([self.x2, self.x4], np.array(dist_fc)))
@@ -141,21 +123,11 @@ class FglibCompareTestCase(unittest.TestCase):
         self.assertEqual(len(self.fglib_graph.edges), len(self.graph.edges))
 
     def test_brute_force(self):
-        worlds = list(itertools.product(*[variable.domain for variable in self.graph.variables]))
-        worlds = np.array(worlds)
-        potentials = np.ones(len(worlds))
-
-        for idx, world in enumerate(worlds):
-
-            for factor in self.graph.factor_nodes:
-                indices = [self.graph.variables.index(variable) for variable in factor.variables]
-                potentials[idx] *= factor.distribution.likelihood(world[indices])
-
+        worlds, potentials = self.graph.brute_force_joint_distribution()
         for index, variable in enumerate(self.graph.variables):
             for value in variable.domain:
                 indices = np.where(worlds[:, index] == value)[0]
-                print("P({} = {}) = {}".format(variable.name, value,
-                                               np.sum(potentials[indices]) / np.sum(potentials)))
+                print("P({} = {}) = {}".format(variable.name, value, np.sum(potentials[indices]) / np.sum(potentials)))
 
     def test_calculation_by_hand(self):
         x1_to_fa = self.graph.node_of(self.x1).unity()
@@ -165,7 +137,6 @@ class FglibCompareTestCase(unittest.TestCase):
 
         fb = self.graph.factor_of([self.x2, self.x3])
         fb_to_x3 = (x2_to_fb * fb.distribution).marginal([self.x3])
-        # print(fb_to_x3)
 
     def test_spa_x1(self):
         nx.draw(self.graph, with_labels=True)
@@ -204,44 +175,12 @@ class FglibCompareTestCase(unittest.TestCase):
     def test_latex_equation(self):
         print(self.graph.to_latex_equation())
 
-    def test_mpa(self):
-        fglib.inference.max_product(self.fglib_graph, query_node=self.fglib_x1)
-
-        # Test maximum of variable node x1
-        maximum = self.fglib_x1.maximum(normalize=False)
-        res = 0.048
-        npt.assert_almost_equal(maximum, res)
-
-        maximum = self.fglib_x1.maximum()
-        res /= np.sum([0.048, 0.048])
-        npt.assert_almost_equal(maximum, res)
-
-        # Test maximum of variable node x2
-        maximum = self.fglib_x2.maximum(normalize=False)
-        res = 0.048
-        npt.assert_almost_equal(maximum, res)
-
-        maximum = self.fglib_x2.maximum()
-        res /= np.sum([0.036, 0.048])
-        npt.assert_almost_equal(maximum, res)
-
-        # Test maximum of variable node x3
-        maximum = self.fglib_x3.maximum(normalize=False)
-        res = 0.048
-        npt.assert_almost_equal(maximum, res)
-
-        maximum = self.fglib_x3.maximum()
-        res /= np.sum([0.048, 0.036])
-        npt.assert_almost_equal(maximum, res)
-
-        # Test maximum of variable node x4
-        maximum = self.fglib_x4.maximum(normalize=False)
-        res = 0.048
-        npt.assert_almost_equal(maximum, res)
-
-        maximum = self.fglib_x4.maximum()
-        res /= np.sum([0.036, 0.048])
-        npt.assert_almost_equal(maximum, res)
+    def test_max_product(self):
+        mode = self.graph.max_product()
+        self.assertEqual(mode[self.x1], [0, 1])
+        self.assertEqual(mode[self.x2], [0])
+        self.assertEqual(mode[self.x3], [1])
+        self.assertEqual(mode[self.x4], [1])
 
 
 if __name__ == "__main__":
