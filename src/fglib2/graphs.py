@@ -1,14 +1,241 @@
-from random import random
-from typing import List, Tuple, Iterable
+import itertools
+from abc import ABC
+from typing import List, Optional
+from typing import Tuple, Iterable
 
 import networkx as nx
-from .nodes import VariableNode, FactorNode, Edge, Node
+import numpy as np
+
+from .distributions import Multinomial
+from .variables import Symbolic
+from .variables import Variable
+
+
+class Node(ABC):
+
+    def sum_product(self, messages: List[Multinomial]) -> Multinomial:
+        """
+        Calculate the sum product algorithms step at this node.
+
+        :param messages: The input messages
+        :return: The output message
+        """
+        raise NotImplementedError()
+
+
+class VariableNode(Node):
+    """Variable node in a factor graph."""
+
+    variable: Symbolic
+    """
+    The variable asserted with this node.
+    """
+
+    def __init__(self, variable: Symbolic):
+        """
+        Create a variable node.
+        :param variable: The variable asserted with this node.
+        """
+        self.variable = variable
+
+    def unity(self) -> Multinomial:
+        """
+        Create a uniform, not normalized distribution over the variable of this node.
+        :return:
+        """
+        return Multinomial([self.variable], normalize=False)
+
+    def __repr__(self):
+        return self.variable.name
+
+    def sum_product(self, messages: List[Multinomial]) -> Multinomial:
+        """
+        Apply the sum product algorithm of a variable node.
+
+        All the input messages are multiplied together.
+
+        :param messages: The incoming messages.
+        :return: The product of all input messages.
+        """
+        message = self.unity()
+        for msg in messages:
+            if msg is not None:
+                message *= msg
+
+        return message
+
+    def create_dirac_message(self, value) -> Multinomial:
+        """
+        Create a dirac message for the given value.
+        :param value: The value to create the dirac message for.
+        :return: The dirac message as distribution
+        """
+        return self._create_dirac_message(self.variable.encode(value))
+
+    def _create_dirac_message(self, value) -> Multinomial:
+        """
+        Create a dirac message for the given value.
+        :param value: The value that is already encoded
+        :return: The dirac message as distribution
+        """
+        distribution = np.zeros(len(self.variable.domain))
+        distribution[value] = 1.
+        return Multinomial([self.variable], distribution)
+
+
+class FactorNode(Node):
+    """Factor node in a factor graph."""
+
+    def __init__(self, distribution: Multinomial):
+        """
+        Create a factor node.
+        :param distribution: The distribution asserted with this factor.
+        """
+        self.distribution = distribution
+
+    @property
+    def variables(self) -> List[Symbolic]:
+        return self.distribution.variables
+
+    def __repr__(self):
+        return "f({})".format(", ".join([v.name for v in self.variables]))
+
+    def sum_product(self, messages: List[Multinomial]) -> Multinomial:
+        """
+        Apply the sum product algorithm of a factor node.
+
+        The product of all incoming messages is calculated and multiplied with the distribution of this factor node.
+
+        :param messages: The incoming messages.
+        :return: The resulting, multivariate distribution.
+        """
+
+        message = self.distribution
+
+        # Product over incoming messages
+        for msg in messages:
+            if msg is not None:
+                message *= msg
+
+        return message
+
+    def __mul__(self, other: 'FactorNode') -> 'FactorGraph':
+        """
+        Multiply factor nodes to get a factor graph.
+
+        :param other: The other factor node.
+        :return: The resulting factor graph.
+        """
+        return FactorGraph() * self * other
+
+
+class Edge:
+    """
+    Edge in a factor graph.
+
+    Edges always have to be directed from a variable node to a factor node or vice versa.
+    """
+
+    def __init__(self, source: Node, target: Node):
+        """
+        Create an edge.
+
+        :param source: The source node.
+        :param target: The target node.
+        """
+        self.source = source
+        self.target = target
+
+        if ((isinstance(source, VariableNode) and isinstance(target, VariableNode)) or (
+                isinstance(source, FactorNode) and isinstance(target, FactorNode))):
+            raise ValueError("Edges can only be created between variable and factor nodes. Tried to create an edge"
+                             "from {} to {}.".format(source, target))
+
+        self._variable_to_factor = None
+        self._factor_to_variable = None
+
+    @property
+    def variable_node(self):
+        """
+        Get the variable node of this edge.
+        """
+        if isinstance(self.source, VariableNode):
+            return self.source
+        elif isinstance(self.target, VariableNode):
+            return self.target
+        else:
+            raise ValueError("Edge does not contain a variable node.")
+
+    @property
+    def factor_node(self):
+        """
+        Get the factor node of this edge.
+        """
+        if isinstance(self.source, FactorNode):
+            return self.source
+        elif isinstance(self.target, FactorNode):
+            return self.target
+        else:
+            raise ValueError("Edge does not contain a factor node.")
+
+    @property
+    def variable_to_factor(self):
+        """
+        Get the message from variable to factor.
+        """
+        return self._variable_to_factor
+
+    @variable_to_factor.setter
+    def variable_to_factor(self, message: Multinomial):
+        """
+        Set the message from variable to factor.
+        """
+        self._variable_to_factor = message
+
+    @property
+    def factor_to_variable(self):
+        """
+        Get the message from factor to variable.
+        """
+        return self._factor_to_variable
+
+    @factor_to_variable.setter
+    def factor_to_variable(self, message: Multinomial):
+        """
+        Set the message from factor to variable.
+        """
+        # assert message.variables == [self.variable_node.variable]
+        self._factor_to_variable = message
+
+    def __str__(self):
+        return "{} -> {}: {} \n".format(self.variable_node, self.factor_node,
+                                        self.variable_to_factor) + "{} -> {}: {} ".format(self.factor_node,
+                                                                                          self.variable_node,
+                                                                                          self.factor_to_variable)
+
+    def __repr__(self):
+        return str(self)
 
 
 class FactorGraph(nx.Graph):
+    """
+    A factor graph.
 
-    def __init__(self):
-        super().__init__(self)
+    A factor graph is a bipartite graph representing the factorization of a function. In probability theory and its
+    applications, factor graphs are used to represent factorization of a probability distribution function, enabling
+    efficient computations, such as the computation of marginal distributions through the sum–product algorithm.
+
+    .. Note::
+        Only factor trees are efficient to compute with the sum product algorithm. Other graphs rely and approximate
+        inference.
+    """
+
+    @property
+    def variables(self) -> List[Symbolic]:
+        """
+        Return a list of all variables in the factor graph.
+        """
+        return list(sorted([node.variable for node in self.variable_nodes]))
 
     @property
     def variable_nodes(self) -> List[VariableNode]:
@@ -31,6 +258,10 @@ class FactorGraph(nx.Graph):
         :param v_of_edge: target node.
         :param attr: edge attributes.
         """
+
+        if self.has_edge(u_of_edge, v_of_edge):
+            raise ValueError("Edge from {} to {} already exists.".format(u_of_edge, v_of_edge))
+
         edge = Edge(u_of_edge, v_of_edge)
         super().add_edge(u_of_edge, v_of_edge, edge=edge)
 
@@ -46,7 +277,7 @@ class FactorGraph(nx.Graph):
     def sum_product(self):
         """
         Apply the sum product algorithm to the factor graph.
-        The variables and factors are modified in place.
+        The messages of the edges are set in place.
         """
         root = self.variable_nodes[0]
 
@@ -56,25 +287,115 @@ class FactorGraph(nx.Graph):
         # Convert tuple to a reversed list
         backward_path = list(dfs)
         forward_path = list(reversed(backward_path))
-        print(*forward_path)
-        import fglib.edges
-        # Messages in forward phase
-        for (v, u) in forward_path:  # Edge direction: v -> u
-            print(v, u)
-            print(*self.neighbors(v))
-            incoming_messages = [self[w][v]['edge'].message_to_source for w in nx.all_neighbors(self, v) if w != v]
-            msg = u.sum_product(incoming_messages)
-            self[u][v]['edge'].message_to_target = msg
 
-        # Messages in backward phase
-        for (u, v) in backward_path:  # Edge direction: u -> v
-            incoming_messages = [self[w][v]['edge'].message_to_source for w in self.neighbors(v) if w != u]
-            msg = u.sum_product(incoming_messages)
-            self[u][v]['edge'].message_to_source(u, v, msg)
+        # Messages in forward phase
+        for i, path in enumerate([forward_path, backward_path]):  # Edge direction: u -> v
+            for (target, source) in path:
+                if i == 1:
+                    # Reverse the direction of the edges in the backward path
+                    target, source = source, target
+                if isinstance(source, VariableNode):
+                    incoming_messages = [self.edges[neighbour, source]['edge'].factor_to_variable for neighbour in
+                                         self.neighbors(source) if neighbour != target]
+                    msg = source.sum_product(incoming_messages)
+                    self.edges[source, target]['edge'].variable_to_factor = msg
+
+                elif isinstance(source, FactorNode):
+                    incoming_messages = [self.edges[neighbour, source]['edge'].variable_to_factor for neighbour in
+                                         self.neighbors(source) if neighbour != target]
+                    msg = source.sum_product(incoming_messages)
+                    self.edges[source, target]['edge'].factor_to_variable = msg.marginal([target.variable],
+                                                                                         normalize=False)
+
+    def node_of(self, variable: Variable) -> VariableNode:
+        """
+        Return the variable node of a variable.
+        :param variable: The variable.
+        :return: The variable node.
+        """
+        return [node for node in self.variable_nodes if node.variable == variable][0]
+
+    def factor_of(self, variables: Iterable[Symbolic]) -> FactorNode:
+        """
+        Return the factor node of a set of factors.
+        :param variables: The variables of the factor.
+        :return: The factor node.
+        """
+        return [node for node in self.factor_nodes if set(node.variables) == set(variables)][0]
 
     def max_product(self):
         """
         Apply the max product algorithm to the factor graph.
         The variables and factors are modified in place.
         """
+        raise NotImplementedError()
 
+    def belief(self, variable: Symbolic) -> Multinomial:
+        """
+        Compute the belief of a variable.
+        :param variable: The variable
+        :return: The distribution over the variable.
+        """
+
+        variable_node = self.node_of(variable)
+        neighbors = self.neighbors(variable_node)
+
+        belief: Optional[Multinomial] = None
+
+        for neighbor in neighbors:
+            if belief is None:
+                belief = self.edges[neighbor, variable_node]['edge'].factor_to_variable
+            else:
+                belief *= self.edges[neighbor, variable_node]['edge'].factor_to_variable
+
+        return belief.marginal([variable])
+
+    def __mul__(self, other: FactorNode) -> 'FactorGraph':
+        """
+        Add a factor to the graph.
+
+        The variables that are not yet in the graph are added and the required edges are created.
+        :param other: The factor to add.
+
+        :return: The factor graph with the added factor.
+        """
+
+        self.add_node(other)
+
+        for variable in other.variables:
+            if variable not in self.variables:
+                self.add_node(VariableNode(variable))
+
+            v_node = [node for node in self.variable_nodes if node.variable == variable][0]
+            self.add_edge(other, v_node)
+
+        return self
+
+    def to_latex_equation(self) -> str:
+        """
+        :return: a latex representation of the equation represented by this factor graph.
+        """
+        return r"P({}) = {}".format(", ".join(tuple(variable.name for variable in self.variables)),
+                                    r" \cdot ".join([str(factor) for factor in self.factor_nodes]))
+
+    def brute_force_joint_distribution(self) -> Tuple[np.ndarray[np.ndarray[int]], np.ndarray[float]]:
+        """
+        Compute the joint distribution of the factor graph by brute force.
+
+        .. Warning::
+            This method is only feasible for small factor graphs as it has exponential runtime.
+
+        :return: Each world and its associated potential. The potential does not necessarily sum to unity, hence
+            one might want to normalize it.
+        """
+        worlds = list(itertools.product(*[variable.domain for variable in self.variables]))
+        worlds = np.array(worlds)
+        potentials = np.ones(len(worlds))
+
+        for idx, world in enumerate(worlds):
+
+            for factor in self.factor_nodes:
+                indices = [self.variables.index(variable) for variable in factor.variables]
+                potentials[idx] *= factor.distribution.likelihood(world[indices])
+
+        return worlds, potentials

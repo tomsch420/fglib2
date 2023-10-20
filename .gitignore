@@ -1,2 +1,3 @@
-doc/build
+doc/_build
 .idea
+*/__pycache__
