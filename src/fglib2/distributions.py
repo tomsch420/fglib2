@@ -3,17 +3,18 @@ from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 
-from .variables import Symbolic
+from random_events.variables import Discrete, Symbolic
+from random_events.events import Event, EncodedEvent
 
 import tabulate
 
 
 class Multinomial:
     """
-    A multinomial distribution over symbolic random variables.
+    A multinomial distribution over discrete random variables.
     """
 
-    variables = List[Symbolic]
+    variables = Tuple[Discrete]
     """
     The variables in the distribution.
     """
@@ -24,9 +25,9 @@ class Multinomial:
     The first dimension indexes over the first variable and so on.
     """
 
-    def __init__(self, variables: Iterable[Symbolic], probabilities: Optional[np.ndarray] = None,
+    def __init__(self, variables: Iterable[Discrete], probabilities: Optional[np.ndarray] = None,
                  normalize: bool = True):
-        self.variables = list(sorted(variables))
+        self.variables = tuple(sorted(variables))
 
         shape = tuple(len(variable.domain) for variable in self.variables)
 
@@ -39,7 +40,7 @@ class Multinomial:
 
         self.probabilities = probabilities / np.sum(probabilities) if normalize else probabilities
 
-    def marginal(self, variables: Iterable[Symbolic], normalize: bool = True) -> 'Multinomial':
+    def marginal(self, variables: Iterable[Discrete], normalize: bool = True) -> 'Multinomial':
         """
         Compute the marginal distribution over the given variables.
 
@@ -56,14 +57,14 @@ class Multinomial:
 
         return Multinomial(variables, probabilities, normalize=normalize)
 
-    def _mode(self) -> Tuple[List, float]:
+    def _mode(self) -> Tuple[List[EncodedEvent], float]:
         """
         Calculate the most likely event.
         :return: The mode of the distribution as index-list and its likelihood.
         """
-
         likelihood = np.max(self.probabilities)
-        mode = [event.tolist() for event in np.where(self.probabilities == likelihood)]
+        events = np.transpose(np.asarray(self.probabilities == likelihood).nonzero())
+        mode = [EncodedEvent(zip(self.variables, event)) for event in events.tolist()]
         return mode, likelihood
 
     def mode(self) -> Tuple[List, float]:
@@ -71,16 +72,8 @@ class Multinomial:
         Calculate the most likely event.
         :return: The mode of the distribution and its likelihood.
         """
-        event, probability = self._mode()
-        return self.decode(event), probability
-
-    def decode(self, event: List[int]) -> List:
-        """
-        Decode an event from a list of indices to a list of values.
-        :param event: The event to decode as a list of indices
-        :return: The decoded event
-        """
-        return [variable.decode(value) for variable, value in zip(self.variables, event)]
+        mode, likelihood = self._mode()
+        return [mode_.decode() for mode_ in mode], likelihood
 
     def __copy__(self) -> 'Multinomial':
         """Return a shallow copy of the distribution."""
@@ -92,7 +85,6 @@ class Multinomial:
         :param other: The other distribution to multiply.
 
         :return: The sum of the two distributions.
-
         """
 
         # if the distributions are over the same variables, multiply the probability element-wise
@@ -150,9 +142,52 @@ class Multinomial:
         """
         return [variable.encode(value) for variable, value in zip(self.variables, event)]
 
+    def encode_many(self, events: Iterable[List]) -> List[List[int]]:
+        """
+        Encode multiple events into a list of indices within the respective domains.
+        :param events: The events to encode as a list of elements of the respective variables domains
+        :return: The encoded events
+        """
+        return [self.encode(event) for event in events]
+
+    def decode(self, event: List[int]) -> List:
+        """
+        Decode an event from a list of indices to a list of values.
+        :param event: The event to decode as a list of indices
+        :return: The decoded event
+        """
+        return [variable.decode(value) for variable, value in zip(self.variables, event)]
+
+    def decode_many(self, events: Iterable[List[int]]) -> List[List]:
+        """
+        Decode multiple events from a list of indices to a list of values.
+        :param events: The events to decode as a list of indices
+        :return: The decoded events
+        """
+        return [self.decode(event) for event in events]
+
+    def _probability(self, event: EncodedEvent) -> float:
+        """
+        Calculate the probability of an event encoded.
+        The encoded event has to contain information about all variables in the distribution.
+        :param event: The event to calculate the probability of.
+        :return: P(event)
+        """
+        indices = list(itertools.product(*(event[variable] for variable in self.variables)))
+        return sum(self.probabilities[index] for index in indices)
+
+    def probability(self, event: Event) -> float:
+        """
+        Calculate the probability of an event.
+        :param event: The event to calculate the probability of.
+        :return: P(event)
+        """
+        event = Event({variable: variable.domain for variable in self.variables}) & event
+        return self._probability(event.encode())
+
     def _likelihood(self, event: List[int]) -> float:
         """
-        Calculate the likelihood of an event.
+        Calculate the likelihood of a full evidence query.
         The event is a list of indices for the variable values in the same order
         :param event:
         :return: P(event)
@@ -161,7 +196,7 @@ class Multinomial:
 
     def likelihood(self, event: List) -> float:
         """
-        Calculate the likelihood of an event.
+        Calculate the likelihood of a full evidence query.
         The event is a list of values for the variables in the same order
         :param event:
         :return: P(event)

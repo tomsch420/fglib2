@@ -9,7 +9,7 @@ import numpy as np
 
 from fglib2.distributions import Multinomial
 from fglib2.graphs import FactorGraph, VariableNode, FactorNode
-from fglib2.variables import Symbolic
+from random_events.variables import Symbolic
 
 
 class FactorGraphTestCase(unittest.TestCase):
@@ -177,10 +177,10 @@ class FglibCompareTestCase(unittest.TestCase):
 
     def test_max_product(self):
         mode = self.graph.max_product()
-        self.assertEqual(mode[self.x1], [0, 1])
-        self.assertEqual(mode[self.x2], [0])
-        self.assertEqual(mode[self.x3], [1])
-        self.assertEqual(mode[self.x4], [1])
+        self.assertEqual(mode[self.x1], (0, 1))
+        self.assertEqual(mode[self.x2], (0, ))
+        self.assertEqual(mode[self.x3], (1, ))
+        self.assertEqual(mode[self.x4], (1, ))
 
 
 if __name__ == "__main__":

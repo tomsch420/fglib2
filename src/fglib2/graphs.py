@@ -7,8 +7,8 @@ import networkx as nx
 import numpy as np
 
 from .distributions import Multinomial
-from .variables import Symbolic
-from .variables import Variable
+from random_events.variables import Discrete
+from random_events.events import Event
 
 
 class Node(ABC):
@@ -27,12 +27,12 @@ class Node(ABC):
 class VariableNode(Node):
     """Variable node in a factor graph."""
 
-    variable: Symbolic
+    variable: Discrete
     """
     The variable asserted with this node.
     """
 
-    def __init__(self, variable: Symbolic):
+    def __init__(self, variable: Discrete):
         """
         Create a variable node.
         :param variable: The variable asserted with this node.
@@ -95,7 +95,7 @@ class FactorNode(Node):
         self.distribution = distribution
 
     @property
-    def variables(self) -> List[Symbolic]:
+    def variables(self) -> List[Discrete]:
         return self.distribution.variables
 
     def __repr__(self):
@@ -232,7 +232,7 @@ class FactorGraph(nx.Graph):
     """
 
     @property
-    def variables(self) -> List[Symbolic]:
+    def variables(self) -> List[Discrete]:
         """
         Return a list of all variables in the factor graph.
         """
@@ -308,7 +308,7 @@ class FactorGraph(nx.Graph):
                     self.edges[source, target]['edge'].factor_to_variable = msg.marginal([target.variable],
                                                                                          normalize=False)
 
-    def max_product(self) -> Dict[Symbolic, Any]:
+    def max_product(self) -> Event:
         """
         Apply the max product algorithm to the factor graph.
         The messages of the edges are set in place.
@@ -351,7 +351,7 @@ class FactorGraph(nx.Graph):
                 # construct dirac message for the mode
                 probabilities = np.zeros(len(source.variable.domain))
                 for mode_ in mode:
-                    probabilities[mode_] = 1.
+                    probabilities[tuple(*mode_.values())] = 1.
                 msg = Multinomial([source.variable], probabilities)
 
                 # set message
@@ -365,12 +365,17 @@ class FactorGraph(nx.Graph):
                 msg = msg.max_message(target.variable)
                 self.edges[source, target]['edge'].factor_to_variable = msg
 
-        result = dict()
+        result = Event()
         for variable in self.variables:
-            result[variable] = self.belief(variable).mode()[0][0]
+            mode, likelihood = self.belief(variable).mode()
+
+            mode_ = mode[0]
+            for mode__ in mode[1:]:
+                mode_ |= mode_ | mode__
+            result = mode_ & result
         return result
 
-    def node_of(self, variable: Variable) -> VariableNode:
+    def node_of(self, variable: Discrete) -> VariableNode:
         """
         Return the variable node of a variable.
         :param variable: The variable.
@@ -378,7 +383,7 @@ class FactorGraph(nx.Graph):
         """
         return [node for node in self.variable_nodes if node.variable == variable][0]
 
-    def factor_of(self, variables: Iterable[Symbolic]) -> FactorNode:
+    def factor_of(self, variables: Iterable[Discrete]) -> FactorNode:
         """
         Return the factor node of a set of factors.
         :param variables: The variables of the factor.
@@ -386,7 +391,7 @@ class FactorGraph(nx.Graph):
         """
         return [node for node in self.factor_nodes if set(node.variables) == set(variables)][0]
 
-    def belief(self, variable: Symbolic) -> Multinomial:
+    def belief(self, variable: Discrete) -> Multinomial:
         """
         Compute the belief of a variable.
         :param variable: The variable
