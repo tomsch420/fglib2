@@ -10,3 +10,9 @@ Distributions
 -------------
 The :mod:`fglib2.distributions` module contains the :class:`fglib2.distributions.Multinomial` class, which implements a
 tabular distribution over discrete random variables. The following example highlights the main features of the class.
+
+
+.. nbgallery::
+
+    notebooks/distributions
+
