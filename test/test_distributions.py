@@ -87,6 +87,15 @@ class MultinomialTestCase(unittest.TestCase):
         event[self.y] = (0, 1)
         self.assertAlmostEqual(distribution.probability(event), 0.3 / 1.8)
 
+    def test_conditional(self):
+        distribution = Multinomial([self.x, self.y], np.array([[0.1, 0.2, 0.3], [0.7, 0.4, 0.1]]),
+                                   normalize=True)
+        event = Event({self.y: (0, 1)})
+        conditional = distribution.conditional(event)
+        self.assertEqual(conditional.probability(event), 1)
+        self.assertEqual(conditional.probability(Event()), 1.)
+        self.assertEqual(conditional.probability(Event({self.y: 2})), 0.)
+
 
 if __name__ == '__main__':
     unittest.main()

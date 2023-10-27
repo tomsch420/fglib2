@@ -173,8 +173,8 @@ class Multinomial:
         :param event: The event to calculate the probability of.
         :return: P(event)
         """
-        indices = list(itertools.product(*(event[variable] for variable in self.variables)))
-        return sum(self.probabilities[index] for index in indices)
+        indices = tuple(event[variable] for variable in self.variables)
+        return self.probabilities[np.ix_(*indices)].sum()
 
     def probability(self, event: Event) -> float:
         """
@@ -206,6 +206,12 @@ class Multinomial:
     def max_message(self, variable) -> 'Multinomial':
         """
         Construct a message that contains the maximum likelihood for each value of the variable.
+
+        .. Note::
+            The message is not normalized. The reason is the purpose of a max message. In every entry of the
+            `probabilities` array is the maximum possible likelihood for the corresponding event. Therefore,
+            this message should not be normalized.
+
         :param variable: The variable to construct it over.
         :return: A not normalized distribution over the variable with the maximum likelihood for each value.
         """
@@ -215,3 +221,27 @@ class Multinomial:
         axis = tuple(index for index, var in enumerate(self.variables) if var != variable)
         probabilities = np.max(self.probabilities, axis=axis)
         return Multinomial([variable], probabilities, normalize=False)
+
+    def _conditional(self, event: EncodedEvent, normalize: bool = True) -> 'Multinomial':
+        """
+        Calculate the conditional distribution given an event encoded.
+        The encoded event has to contain information about all variables in the distribution.
+        :param event: The event to condition on.
+        :param normalize: Rather to return a normalized distribution or not.
+        :return: The conditional distribution
+        """
+        indices = tuple(event[variable] for variable in self.variables)
+        indices = np.ix_(*indices)
+        probabilities = np.zeros_like(self.probabilities)
+        probabilities[indices] = self.probabilities[indices]
+        return Multinomial(self.variables, probabilities, normalize=normalize)
+
+    def conditional(self, event: Event, normalize: bool = True) -> 'Multinomial':
+        """
+        Calculate the conditional distribution given an event.
+        :param event: The event to condition on
+        :param normalize: Rather to return a normalized distribution or not.
+        :return: The conditional distribution
+        """
+        event = Event({variable: variable.domain for variable in self.variables}) & event
+        return self._conditional(event.encode(), normalize=normalize)
