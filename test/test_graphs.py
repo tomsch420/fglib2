@@ -123,11 +123,8 @@ class FglibCompareTestCase(unittest.TestCase):
         self.assertEqual(len(self.fglib_graph.edges), len(self.graph.edges))
 
     def test_brute_force(self):
-        worlds, potentials = self.graph.brute_force_joint_distribution()
-        for index, variable in enumerate(self.graph.variables):
-            for value in variable.domain:
-                indices = np.where(worlds[:, index] == value)[0]
-                print("P({} = {}) = {}".format(variable.name, value, np.sum(potentials[indices]) / np.sum(potentials)))
+        distribution = self.graph.brute_force_joint_distribution()
+        print(distribution.to_tabulate())
 
     def test_calculation_by_hand(self):
         x1_to_fa = self.graph.node_of(self.x1).unity()

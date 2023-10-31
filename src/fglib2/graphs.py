@@ -439,7 +439,7 @@ class FactorGraph(nx.Graph):
         return r"P({}) = {}".format(", ".join(tuple(variable.name for variable in self.variables)),
                                     r" \cdot ".join([str(factor) for factor in self.factor_nodes]))
 
-    def brute_force_joint_distribution(self) -> Tuple[np.ndarray[np.ndarray[int]], np.ndarray[float]]:
+    def brute_force_joint_distribution(self) -> Multinomial:
         """
         Compute the joint distribution of the factor graph by brute force.
 
@@ -451,15 +451,16 @@ class FactorGraph(nx.Graph):
         """
         worlds = list(itertools.product(*[variable.domain for variable in self.variables]))
         worlds = np.array(worlds)
-        potentials = np.ones(len(worlds))
+        potentials = np.zeros(tuple(len(variable.domain) for variable in self.variables))
 
         for idx, world in enumerate(worlds):
-
+            potential = 1.
             for factor in self.factor_nodes:
                 indices = [self.variables.index(variable) for variable in factor.variables]
-                potentials[idx] *= factor.distribution.likelihood(world[indices])
+                potential *= factor.distribution.likelihood(world[indices])
+            potentials[tuple(world)] = potential
 
-        return worlds, potentials
+        return Multinomial(self.variables, potentials)
 
     def reset(self):
         """
