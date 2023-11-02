@@ -1,6 +1,6 @@
 import itertools
 from abc import ABC
-from typing import List, Optional, Any, Dict
+from typing import List, Optional
 from typing import Tuple, Iterable
 
 import networkx as nx
@@ -41,10 +41,10 @@ class VariableNode(Node):
 
     def unity(self) -> Multinomial:
         """
-        Create a uniform, not normalized distribution over the variable of this node.
+        Create a uniform distribution over the variable of this node.
         :return:
         """
-        return Multinomial([self.variable], normalize=False)
+        return Multinomial([self.variable])
 
     def __repr__(self):
         return self.variable.name
@@ -64,24 +64,6 @@ class VariableNode(Node):
                 message *= msg
 
         return message
-
-    def create_dirac_message(self, value) -> Multinomial:
-        """
-        Create a dirac message for the given value.
-        :param value: The value to create the dirac message for.
-        :return: The dirac message as distribution
-        """
-        return self._create_dirac_message(self.variable.encode(value))
-
-    def _create_dirac_message(self, value) -> Multinomial:
-        """
-        Create a dirac message for the given value.
-        :param value: The value that is already encoded
-        :return: The dirac message as distribution
-        """
-        distribution = np.zeros(len(self.variable.domain))
-        distribution[value] = 1.
-        return Multinomial([self.variable], distribution)
 
 
 class FactorNode(Node):
@@ -305,13 +287,14 @@ class FactorGraph(nx.Graph):
                     incoming_messages = [self.edges[neighbour, source]['edge'].variable_to_factor for neighbour in
                                          self.neighbors(source) if neighbour != target]
                     msg = source.sum_product(incoming_messages)
-                    self.edges[source, target]['edge'].factor_to_variable = msg.marginal([target.variable],
-                                                                                         normalize=False)
+                    self.edges[source, target]['edge'].factor_to_variable = msg.marginal([target.variable])
 
     def max_product(self) -> Event:
         """
         Apply the max product algorithm to the factor graph.
         The messages of the edges are set in place.
+
+        :return: The mode of the joint distribution as an Event.
         """
 
         root = self.variable_nodes[0]
@@ -441,13 +424,12 @@ class FactorGraph(nx.Graph):
 
     def brute_force_joint_distribution(self) -> Multinomial:
         """
-        Compute the joint distribution of the factor graph by brute force.
+        Compute the joint distribution of the factor graphs variables by brute force.
 
         .. Warning::
-            This method is only feasible for small factor graphs as it has exponential runtime.
+            This method is only feasible for a small number of variables as it has exponential runtime.
 
-        :return: Each world and its associated potential. The potential does not necessarily sum to unity, hence
-            one might want to normalize it.
+        :return: A Multinomial distribution over all the variables.
         """
         worlds = list(itertools.product(*[variable.domain for variable in self.variables]))
         worlds = np.array(worlds)

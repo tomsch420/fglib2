@@ -22,11 +22,11 @@ class Multinomial:
     probabilities: np.ndarray
     """
     The probability mass function. The dimensions correspond to the variables in the same order.
-    The first dimension indexes over the first variable and so on.
+    The first dimension indexes over the first variable and so on. If no probabilities are provided in the constructor,
+    the probabilities are initialized with ones.
     """
 
-    def __init__(self, variables: Iterable[Discrete], probabilities: Optional[np.ndarray] = None,
-                 normalize: bool = True):
+    def __init__(self, variables: Iterable[Discrete], probabilities: Optional[np.ndarray] = None):
         self.variables = tuple(sorted(variables))
 
         shape = tuple(len(variable.domain) for variable in self.variables)
@@ -38,29 +38,29 @@ class Multinomial:
             raise ValueError("The number of variables must match the number of dimensions in the probability array."
                              "Variables: {}".format(self.variables), "Dimensions: {}".format(probabilities.shape))
 
-        self.probabilities = probabilities / np.sum(probabilities) if normalize else probabilities
+        self.probabilities = probabilities
 
-    def marginal(self, variables: Iterable[Discrete], normalize: bool = True) -> 'Multinomial':
+    def marginal(self, variables: Iterable[Discrete]) -> 'Multinomial':
         """
         Compute the marginal distribution over the given variables.
 
         :param variables: The variables to keep over.
-        :param normalize: Rather to return a normalized distribution or not.
 
         :return: The marginal distribution over variables.
         """
 
-        # calculate which variables to marginalize over
+        # calculate which variables to marginalize over as the difference between variables and self.variables
         axis = tuple(self.variables.index(variable) for variable in self.variables if variable not in variables)
 
+        # marginalize the probabilities over the axis
         probabilities = np.sum(self.probabilities, axis=axis)
 
-        return Multinomial(variables, probabilities, normalize=normalize)
+        return Multinomial(variables, probabilities)
 
     def _mode(self) -> Tuple[List[EncodedEvent], float]:
         """
         Calculate the most likely event.
-        :return: The mode of the distribution as index-list and its likelihood.
+        :return: The mode of the distribution as EncodedEvent and its likelihood.
         """
         likelihood = np.max(self.probabilities)
         events = np.transpose(np.asarray(self.probabilities == likelihood).nonzero())
@@ -70,13 +70,15 @@ class Multinomial:
     def mode(self) -> Tuple[List, float]:
         """
         Calculate the most likely event.
-        :return: The mode of the distribution and its likelihood.
+        :return: The mode of the distribution as Event and its likelihood.
         """
         mode, likelihood = self._mode()
         return [mode_.decode() for mode_ in mode], likelihood
 
     def __copy__(self) -> 'Multinomial':
-        """Return a shallow copy of the distribution."""
+        """
+        :return: a shallow copy of the distribution.
+        """
         return Multinomial(self.variables, self.probabilities)
 
     def __mul__(self, other: 'Multinomial') -> 'Multinomial':
@@ -105,7 +107,7 @@ class Multinomial:
         shape[dimension] = -1
         probabilities = self.probabilities * other.probabilities.reshape(shape)
 
-        return Multinomial(self.variables, probabilities, normalize=False)
+        return Multinomial(self.variables, probabilities)
 
     def __eq__(self, other: 'Multinomial') -> bool:
         """Compare self with other and return the boolean result.
@@ -116,7 +118,7 @@ class Multinomial:
         """
         return (self.variables == other.variables and
                 self.probabilities.shape == other.probabilities.shape and
-                np.all(self.probabilities == other.probabilities))
+                np.allclose(self.probabilities, other.probabilities))
 
     def __str__(self):
         return "P({}): \n".format(", ".join(var.name for var in self.variables)) + str(self.probabilities)
@@ -134,7 +136,7 @@ class Multinomial:
 
         return tabulate.tabulate(table, headers="firstrow", tablefmt="fancy_grid")
 
-    def encode(self, event: List) -> List[int]:
+    def encode(self, event: Iterable) -> List[int]:
         """
         Encode an event into a list of indices within the respective domains.
         :param event: The event to encode as a list of elements of the respective variables domains
@@ -142,7 +144,7 @@ class Multinomial:
         """
         return [variable.encode(value) for variable, value in zip(self.variables, event)]
 
-    def encode_many(self, events: Iterable[List]) -> List[List[int]]:
+    def encode_many(self, events: Iterable[Iterable]) -> List[List[int]]:
         """
         Encode multiple events into a list of indices within the respective domains.
         :param events: The events to encode as a list of elements of the respective variables domains
@@ -150,7 +152,7 @@ class Multinomial:
         """
         return [self.encode(event) for event in events]
 
-    def decode(self, event: List[int]) -> List:
+    def decode(self, event: Iterable[int]) -> List:
         """
         Decode an event from a list of indices to a list of values.
         :param event: The event to decode as a list of indices
@@ -158,7 +160,7 @@ class Multinomial:
         """
         return [variable.decode(value) for variable, value in zip(self.variables, event)]
 
-    def decode_many(self, events: Iterable[List[int]]) -> List[List]:
+    def decode_many(self, events: Iterable[Iterable[int]]) -> List[List]:
         """
         Decode multiple events from a list of indices to a list of values.
         :param events: The events to decode as a list of indices
@@ -220,28 +222,34 @@ class Multinomial:
                              "The distributions variables are {}".format(variable, self.variables))
         axis = tuple(index for index, var in enumerate(self.variables) if var != variable)
         probabilities = np.max(self.probabilities, axis=axis)
-        return Multinomial([variable], probabilities, normalize=False)
+        return Multinomial([variable], probabilities)
 
-    def _conditional(self, event: EncodedEvent, normalize: bool = True) -> 'Multinomial':
+    def _conditional(self, event: EncodedEvent) -> 'Multinomial':
         """
         Calculate the conditional distribution given an event encoded.
         The encoded event has to contain information about all variables in the distribution.
         :param event: The event to condition on.
-        :param normalize: Rather to return a normalized distribution or not.
         :return: The conditional distribution
         """
         indices = tuple(event[variable] for variable in self.variables)
         indices = np.ix_(*indices)
         probabilities = np.zeros_like(self.probabilities)
         probabilities[indices] = self.probabilities[indices]
-        return Multinomial(self.variables, probabilities, normalize=normalize)
+        return Multinomial(self.variables, probabilities)
 
-    def conditional(self, event: Event, normalize: bool = True) -> 'Multinomial':
+    def conditional(self, event: Event) -> 'Multinomial':
         """
         Calculate the conditional distribution given an event.
         :param event: The event to condition on
-        :param normalize: Rather to return a normalized distribution or not.
         :return: The conditional distribution
         """
         event = Event({variable: variable.domain for variable in self.variables}) & event
-        return self._conditional(event.encode(), normalize=normalize)
+        return self._conditional(event.encode())
+
+    def normalize(self) -> 'Multinomial':
+        """
+        Normalize the distribution.
+        :return: The normalized distribution
+        """
+        normalized_probabilities = self.probabilities / np.sum(self.probabilities)
+        return Multinomial(self.variables, normalized_probabilities)

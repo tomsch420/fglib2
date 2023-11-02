@@ -23,7 +23,7 @@ class FactorGraphTestCase(unittest.TestCase):
         cls.y = Symbolic("Y", range(3))
         cls.z = Symbolic("Z", range(5))
 
-    def test_creation(self):
+    def test_creation_by_multiplication(self):
         fxy = FactorNode(Multinomial([self.x, self.y]))
         fyz = FactorNode(Multinomial([self.y, self.z]))
 
@@ -60,13 +60,25 @@ class InferenceTestCase(unittest.TestCase):
         cls.factor_graph.add_nodes_from([f_x, f_xy, f_yz])
         cls.factor_graph.add_edges_from([(x, f_x), (x, f_xy), (y, f_xy), (y, f_yz), (z, f_yz)])
 
-    def test_sum_product(self):
+    def setUp(self):
+        self.factor_graph.reset()
+
+    def test_drawing(self):
         # plot graph
         nx.draw(self.factor_graph, with_labels=True)
         # plt.show()
 
+    def test_sum_product(self):
         self.factor_graph.sum_product()
-        self.assertTrue(True)
+        for edge in self.factor_graph.edges:
+            self.assertIsNotNone(self.factor_graph.edges[edge]['edge'].variable_to_factor)
+            self.assertIsNotNone(self.factor_graph.edges[edge]['edge'].factor_to_variable)
+
+    def test_max_product(self):
+        self.factor_graph.max_product()
+        for edge in self.factor_graph.edges:
+            self.assertIsNotNone(self.factor_graph.edges[edge]['edge'].variable_to_factor)
+            self.assertIsNotNone(self.factor_graph.edges[edge]['edge'].factor_to_variable)
 
 
 class FglibCompareTestCase(unittest.TestCase):
@@ -142,7 +154,7 @@ class FglibCompareTestCase(unittest.TestCase):
         # Test belief of variable node x1
         fglib_belief = self.fglib_x1.belief(normalize=True)
         self.graph.sum_product()
-        belief = self.graph.belief(self.x1)
+        belief = self.graph.belief(self.x1).normalize()
         self.assertTrue(np.allclose(belief.probabilities, fglib_belief.pmf))
 
     def test_spa_x2(self):
@@ -150,7 +162,7 @@ class FglibCompareTestCase(unittest.TestCase):
         # Test belief of variable node x2
         fglib_belief = self.fglib_x2.belief(normalize=True)
         self.graph.sum_product()
-        belief = self.graph.belief(self.x2)
+        belief = self.graph.belief(self.x2).normalize()
         self.assertTrue(np.allclose(belief.probabilities, fglib_belief.pmf))
 
     def test_spa_x3(self):
@@ -158,7 +170,7 @@ class FglibCompareTestCase(unittest.TestCase):
         # Test belief of variable node x3
         fglib_belief = self.fglib_x3.belief(normalize=True)
         self.graph.sum_product()
-        belief = self.graph.belief(self.x3)
+        belief = self.graph.belief(self.x3).normalize()
         self.assertTrue(np.allclose(belief.probabilities, fglib_belief.pmf))
 
     def test_spa_x4(self):
@@ -166,7 +178,7 @@ class FglibCompareTestCase(unittest.TestCase):
         # Test belief of variable node x4
         fglib_belief = self.fglib_x4.belief(normalize=True)
         self.graph.sum_product()
-        belief = self.graph.belief(self.x4)
+        belief = self.graph.belief(self.x4).normalize()
         self.assertTrue(np.allclose(belief.probabilities, fglib_belief.pmf))
 
     def test_latex_equation(self):
