@@ -10,4 +10,4 @@ Install the package via
     pip install fglib2
 ``
 
-Read the docs TODO.
+Read the docs [here](https://fglib2.readthedocs.io/en/latest/).

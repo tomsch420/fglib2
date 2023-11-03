@@ -20,7 +20,7 @@ classifiers = [
 ]
 keywords=["probabilistic graphical models", "factor graphs", "belief propagation", "sum product",
     "probabilistic machine learning", "probability theory", "variables", "reasoning under uncertainty"]
-dynamic = ["version"]
+dynamic = ["version", "dependencies"]
 
 [project.urls]
 "Source" = 'https://github.com/tomsch420/fglib2'
@@ -32,3 +32,4 @@ include = ["fglib2*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "fglib2.__version__"}
+dependencies = {file = "requirements.txt"}
