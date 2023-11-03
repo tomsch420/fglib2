@@ -12,6 +12,39 @@ from fglib2.graphs import FactorGraph, VariableNode, FactorNode
 from random_events.variables import Symbolic
 
 
+class FactorNodeTestCase(unittest.TestCase):
+    x: Symbolic
+    y: Symbolic
+    z: Symbolic
+    random_factor_node: FactorNode
+    crafted_factor_node: FactorNode
+
+    @classmethod
+    def setUpClass(cls):
+        np.random.seed(69)
+        cls.x = Symbolic("X", range(2))
+        cls.y = Symbolic("Y", range(3))
+        cls.z = Symbolic("Z", range(5))
+        cls.random_factor_node = FactorNode(Multinomial([cls.x, cls.y, cls.z], np.random.rand(len(cls.x.domain),
+                                                                                              len(cls.y.domain),
+                                                                                              len(cls.z.domain))))
+
+        cls.crafted_factor_node = (
+            FactorNode(Multinomial([cls.x, cls.y], np.array([[0.1, 0.2, 0.3], [0.7, 0.4, 0.1]]))))
+
+    def test_random_max_message(self):
+        max_message = self.random_factor_node.max_message(self.z)
+        self.assertEqual(max_message.probabilities.shape, (5, ))
+
+    def test_crafted_max_message(self):
+        max_message = self.crafted_factor_node.max_message(self.x)
+        self.assertTrue(np.allclose(max_message.probabilities, np.array([0.3, 0.7])))
+
+    def test_max_message_wrong_variable(self):
+        with self.assertRaises(ValueError):
+            self.crafted_factor_node.max_message(self.z)
+
+
 class FactorGraphTestCase(unittest.TestCase):
     x: Symbolic
     y: Symbolic
@@ -187,9 +220,9 @@ class FglibCompareTestCase(unittest.TestCase):
     def test_max_product(self):
         mode = self.graph.max_product()
         self.assertEqual(mode[self.x1], (0, 1))
-        self.assertEqual(mode[self.x2], (0, ))
-        self.assertEqual(mode[self.x3], (1, ))
-        self.assertEqual(mode[self.x4], (1, ))
+        self.assertEqual(mode[self.x2], (0,))
+        self.assertEqual(mode[self.x3], (1,))
+        self.assertEqual(mode[self.x4], (1,))
 
 
 if __name__ == "__main__":

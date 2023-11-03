@@ -160,18 +160,6 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         self.assertEqual(mode[1]["X"], (1,))
         self.assertEqual(mode[1]["Y"], (0,))
 
-    def test_random_max_message(self):
-        max_message = self.random_distribution.max_message(self.z)
-        self.assertEqual(max_message.probabilities.shape, (5, ))
-
-    def test_crafted_max_message(self):
-        max_message = self.crafted_distribution.max_message(self.x)
-        self.assertTrue(np.allclose(max_message.probabilities, np.array([0.3, 0.7])))
-
-    def test_max_message_wrong_variable(self):
-        with self.assertRaises(ValueError):
-            self.crafted_distribution.max_message(self.z)
-
     def test_crafted_probability(self):
         distribution = self.crafted_distribution.normalize()
         event = Event()
@@ -269,6 +257,7 @@ class MultinomialMultiplicationTestCase(unittest.TestCase):
     def test_disjoint_variables(self):
         with self.assertRaises(AssertionError):
             self.distribution_x * self.distribution_y
+
 
 if __name__ == '__main__':
     unittest.main()

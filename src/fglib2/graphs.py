@@ -111,6 +111,25 @@ class FactorNode(Node):
         """
         return FactorGraph() * self * other
 
+    def max_message(self, variable) -> 'Multinomial':
+        """
+        Construct a message that contains the maximum likelihood for each value of the variable.
+
+        .. Note::
+            The message is not normalized. The reason is the purpose of a max message. In every entry of the
+            `probabilities` array is the maximum possible likelihood for the corresponding event. Therefore,
+            this message should not be normalized.
+
+        :param variable: The variable to construct it over.
+        :return: A not normalized distribution over the variable with the maximum likelihood for each value.
+        """
+        if variable not in self.variables:
+            raise ValueError("The variable {} is not in the distribution."
+                             "The distributions variables are {}".format(variable, self.variables))
+        axis = tuple(index for index, var in enumerate(self.variables) if var != variable)
+        probabilities = np.max(self.distribution.probabilities, axis=axis)
+        return Multinomial([variable], probabilities)
+
 
 class Edge:
     """
@@ -318,7 +337,7 @@ class FactorGraph(nx.Graph):
                                      self.neighbors(source) if neighbour != target]
                 msg = source.sum_product(incoming_messages)
 
-                msg = msg.max_message(target.variable)
+                msg = FactorNode(msg).max_message(target.variable)
                 self.edges[source, target]['edge'].factor_to_variable = msg
 
         for source, target in backtracking_path:
@@ -345,7 +364,7 @@ class FactorGraph(nx.Graph):
                                      self.neighbors(source)]
                 msg = source.sum_product(incoming_messages)
 
-                msg = msg.max_message(target.variable)
+                msg = FactorNode(msg).max_message(target.variable)
                 self.edges[source, target]['edge'].factor_to_variable = msg
 
         result = Event()
