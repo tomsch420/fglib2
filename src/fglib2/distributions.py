@@ -7,9 +7,10 @@ from random_events.variables import Discrete
 from random_events.events import Event, EncodedEvent
 
 import tabulate
+from probabilistic_model.probabilistic_model import ProbabilisticModel
 
 
-class Multinomial:
+class Multinomial(ProbabilisticModel):
     """
     A multinomial distribution over discrete random variables.
     """
@@ -27,7 +28,7 @@ class Multinomial:
     """
 
     def __init__(self, variables: Iterable[Discrete], probabilities: Optional[np.ndarray] = None):
-        self.variables = tuple(sorted(variables))
+        super().__init__(variables)
 
         shape = tuple(len(variable.domain) for variable in self.variables)
 
@@ -66,14 +67,6 @@ class Multinomial:
         events = np.transpose(np.asarray(self.probabilities == likelihood).nonzero())
         mode = [EncodedEvent(zip(self.variables, event)) for event in events.tolist()]
         return mode, likelihood
-
-    def mode(self) -> Tuple[List, float]:
-        """
-        Calculate the most likely event.
-        :return: The mode of the distribution as Event and its likelihood.
-        """
-        mode, likelihood = self._mode()
-        return [mode_.decode() for mode_ in mode], likelihood
 
     def __copy__(self) -> 'Multinomial':
         """
@@ -195,15 +188,6 @@ class Multinomial:
         :return: P(event)
         """
         return float(self.probabilities[tuple(event)])
-
-    def likelihood(self, event: List) -> float:
-        """
-        Calculate the likelihood of a full evidence query.
-        The event is a list of values for the variables in the same order
-        :param event:
-        :return: P(event)
-        """
-        return self._likelihood(self.encode(event))
 
     def _conditional(self, event: EncodedEvent) -> 'Multinomial':
         """
