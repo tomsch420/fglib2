@@ -8,6 +8,7 @@ from random_events.events import Event, EncodedEvent
 
 import tabulate
 from probabilistic_model.probabilistic_model import ProbabilisticModel
+from typing_extensions import Self
 
 
 class Multinomial(ProbabilisticModel):
@@ -15,7 +16,7 @@ class Multinomial(ProbabilisticModel):
     A multinomial distribution over discrete random variables.
     """
 
-    variables = Tuple[Discrete]
+    variables: Tuple[Discrete]
     """
     The variables in the distribution.
     """
@@ -42,13 +43,6 @@ class Multinomial(ProbabilisticModel):
         self.probabilities = probabilities
 
     def marginal(self, variables: Iterable[Discrete]) -> 'Multinomial':
-        """
-        Compute the marginal distribution over the given variables.
-
-        :param variables: The variables to keep over.
-
-        :return: The marginal distribution over variables.
-        """
 
         # calculate which variables to marginalize over as the difference between variables and self.variables
         axis = tuple(self.variables.index(variable) for variable in self.variables if variable not in variables)
@@ -59,10 +53,6 @@ class Multinomial(ProbabilisticModel):
         return Multinomial(variables, probabilities)
 
     def _mode(self) -> Tuple[List[EncodedEvent], float]:
-        """
-        Calculate the most likely event.
-        :return: The mode of the distribution as EncodedEvent and its likelihood.
-        """
         likelihood = np.max(self.probabilities)
         events = np.transpose(np.asarray(self.probabilities == likelihood).nonzero())
         mode = [EncodedEvent(zip(self.variables, event)) for event in events.tolist()]
@@ -109,7 +99,7 @@ class Multinomial(ProbabilisticModel):
         functions are equal and the order of dimensions are equal.
 
         """
-        return (self.variables == other.variables and
+        return (isinstance(other, self.__class__) and self.variables == other.variables and
                 self.probabilities.shape == other.probabilities.shape and
                 np.allclose(self.probabilities, other.probabilities))
 
@@ -129,87 +119,19 @@ class Multinomial(ProbabilisticModel):
 
         return tabulate.tabulate(table, headers="firstrow", tablefmt="fancy_grid")
 
-    def encode(self, event: Iterable) -> List[int]:
-        """
-        Encode an event into a list of indices within the respective domains.
-        :param event: The event to encode as a list of elements of the respective variables domains
-        :return: The encoded event
-        """
-        return [variable.encode(value) for variable, value in zip(self.variables, event)]
-
-    def encode_many(self, events: Iterable[Iterable]) -> List[List[int]]:
-        """
-        Encode multiple events into a list of indices within the respective domains.
-        :param events: The events to encode as a list of elements of the respective variables domains
-        :return: The encoded events
-        """
-        return [self.encode(event) for event in events]
-
-    def decode(self, event: Iterable[int]) -> List:
-        """
-        Decode an event from a list of indices to a list of values.
-        :param event: The event to decode as a list of indices
-        :return: The decoded event
-        """
-        return [variable.decode(value) for variable, value in zip(self.variables, event)]
-
-    def decode_many(self, events: Iterable[Iterable[int]]) -> List[List]:
-        """
-        Decode multiple events from a list of indices to a list of values.
-        :param events: The events to decode as a list of indices
-        :return: The decoded events
-        """
-        return [self.decode(event) for event in events]
-
     def _probability(self, event: EncodedEvent) -> float:
-        """
-        Calculate the probability of an event encoded.
-        The encoded event has to contain information about all variables in the distribution.
-        :param event: The event to calculate the probability of.
-        :return: P(event)
-        """
         indices = tuple(event[variable] for variable in self.variables)
         return self.probabilities[np.ix_(*indices)].sum()
 
-    def probability(self, event: Event) -> float:
-        """
-        Calculate the probability of an event.
-        :param event: The event to calculate the probability of.
-        :return: P(event)
-        """
-        event = Event({variable: variable.domain for variable in self.variables}) & event
-        return self._probability(event.encode())
-
     def _likelihood(self, event: List[int]) -> float:
-        """
-        Calculate the likelihood of a full evidence query.
-        The event is a list of indices for the variable values in the same order
-        :param event:
-        :return: P(event)
-        """
         return float(self.probabilities[tuple(event)])
 
-    def _conditional(self, event: EncodedEvent) -> 'Multinomial':
-        """
-        Calculate the conditional distribution given an event encoded.
-        The encoded event has to contain information about all variables in the distribution.
-        :param event: The event to condition on.
-        :return: The conditional distribution
-        """
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
         indices = tuple(event[variable] for variable in self.variables)
         indices = np.ix_(*indices)
         probabilities = np.zeros_like(self.probabilities)
         probabilities[indices] = self.probabilities[indices]
-        return Multinomial(self.variables, probabilities)
-
-    def conditional(self, event: Event) -> 'Multinomial':
-        """
-        Calculate the conditional distribution given an event.
-        :param event: The event to condition on
-        :return: The conditional distribution
-        """
-        event = Event({variable: variable.domain for variable in self.variables}) & event
-        return self._conditional(event.encode())
+        return Multinomial(self.variables, probabilities), self.probabilities[indices].sum()
 
     def normalize(self) -> 'Multinomial':
         """

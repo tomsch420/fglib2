@@ -54,45 +54,6 @@ class MultinomialConstructionTestCase(unittest.TestCase):
         self.assertTrue(str(distribution))
 
 
-class MultinomialEncodingTestCase(unittest.TestCase):
-
-    animal: Symbolic
-    color: Symbolic
-    distribution: Multinomial
-
-    @classmethod
-    def setUpClass(cls):
-        cls.animal = Symbolic("animal", {"cat", "dog", "mouse"})
-        cls.color = Symbolic("color", {"grey", "brown", "black"})
-        cls.distribution = Multinomial((cls.animal, cls.color))
-
-    def test_encode(self):
-        event = ["cat", "grey"]
-        self.assertEqual(self.distribution.encode(event), [0, 2])
-
-    def test_decode(self):
-        event = [1, 0]
-        self.assertEqual(self.distribution.decode(event), ["dog", "black"])
-
-    def test_encode_raises(self):
-        event = ["bob", "linda"]
-        with self.assertRaises(ValueError):
-            self.distribution.encode(event)
-
-    def test_decode_raises(self):
-        event = [3, 0]
-        with self.assertRaises(IndexError):
-            self.distribution.decode(event)
-
-    def test_encode_many(self):
-        event = [["cat", "grey"], ["dog", "brown"]]
-        self.assertEqual(self.distribution.encode_many(event), [[0, 2], [1, 1]])
-
-    def test_decode_many(self):
-        event = [[0, 2], [1, 1]]
-        self.assertEqual(self.distribution.decode_many(event), [["cat", "grey"], ["dog", "brown"]])
-
-
 class MultinomialInferenceTestCase(unittest.TestCase):
     x: Symbolic
     y: Symbolic
@@ -184,14 +145,16 @@ class MultinomialInferenceTestCase(unittest.TestCase):
 
     def test_crafted_conditional(self):
         event = Event({self.y: (0, 1)})
-        conditional = self.crafted_distribution.conditional(event).normalize()
+        conditional, probability = self.crafted_distribution.conditional(event)
+        conditional = conditional.normalize()
         self.assertEqual(conditional.probability(event), 1)
         self.assertEqual(conditional.probability(Event()), 1.)
         self.assertEqual(conditional.probability(Event({self.y: 2})), 0.)
 
     def test_random_conditional(self):
         event = Event({self.y: (0, 1)})
-        conditional = self.random_distribution.conditional(event).normalize()
+        conditional, _ = self.random_distribution.conditional(event)
+        conditional = conditional.normalize()
         self.assertAlmostEqual(conditional.probability(event), 1)
         self.assertAlmostEqual(conditional.probability(Event()), 1.)
         self.assertEqual(conditional.probability(Event({self.y: 2})), 0.)
@@ -246,8 +209,9 @@ class MultinomialMultiplicationTestCase(unittest.TestCase):
             event = condition.intersection(Event({self.y: y_value}))
 
             # manual result as P(Y,X) = P(X) * P(Y|X)
+            conditional_result, conditional_probability = result.conditional(condition)
             manual_result = (adjusted_distribution_x.normalize().probability(condition) *
-                             result.conditional(condition).normalize().probability(event))
+                             conditional_result.normalize().probability(event))
             product_result = result.normalize().probability(event)
             self.assertAlmostEqual(manual_result, product_result)
 
