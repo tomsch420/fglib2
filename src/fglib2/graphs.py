@@ -2,13 +2,15 @@ import itertools
 from abc import ABC
 from typing import List, Optional
 from typing import Tuple, Iterable
+from typing_extensions import Self
 
 import networkx as nx
 import numpy as np
 
 from .distributions import Multinomial
-from random_events.variables import Discrete
-from random_events.events import Event
+from random_events.variables import Discrete, Variable
+from random_events.events import Event, EncodedEvent
+from probabilistic_model.probabilistic_model import ProbabilisticModel
 
 
 class Node(ABC):
@@ -219,7 +221,7 @@ class Edge:
         return str(self)
 
 
-class FactorGraph(nx.Graph):
+class FactorGraph(nx.Graph, ProbabilisticModel):
     """
     A factor graph.
 
@@ -470,3 +472,23 @@ class FactorGraph(nx.Graph):
         for edge in self.edges:
             self.edges[edge]['edge'].variable_to_factor = None
             self.edges[edge]['edge'].factor_to_variable = None
+
+    def _likelihood(self, event: Iterable) -> float:
+        raise NotImplementedError("Implement this method according to its docstring here"
+                                  "https://probabilistic-model.readthedocs.io/en/latest/autoapi/probabilistic_model/probabilistic_model/index.html#")
+
+    def _probability(self, event: EncodedEvent) -> float:
+        raise NotImplementedError("Implement this method according to its docstring here"
+                                  "https://probabilistic-model.readthedocs.io/en/latest/autoapi/probabilistic_model/probabilistic_model/index.html#")
+
+    def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
+        raise NotImplementedError("Implement this method according to its docstring here"
+                                  "https://probabilistic-model.readthedocs.io/en/latest/autoapi/probabilistic_model/probabilistic_model/index.html#")
+
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+        raise NotImplementedError("Implement this method according to its docstring here"
+                                  "https://probabilistic-model.readthedocs.io/en/latest/autoapi/probabilistic_model/probabilistic_model/index.html#")
+
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        raise NotImplementedError("Implement this method according to its docstring here"
+                                  "https://probabilistic-model.readthedocs.io/en/latest/autoapi/probabilistic_model/probabilistic_model/index.html#")
