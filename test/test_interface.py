@@ -1,4 +1,3 @@
-import math
 import random
 import unittest
 from typing import List
