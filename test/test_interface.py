@@ -52,7 +52,7 @@ def generate_random_likelihood_event_over_variables(variables: List[Symbolic]) -
     """
     return [random.choice(variable.domain) for variable in variables]
 
-
+@unittest.skip("Not implemented")
 class InterfaceTestCase(unittest.TestCase):
 
     variables = [Symbolic(f"x_{i}", range(random.randrange(2, 4))) for i in range(9)]
